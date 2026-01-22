@@ -33,4 +33,24 @@ contract ReportRegistry is IReportRegistry, Ownable {
     function getReportCount() external view returns (uint256) {
         return _reportCounter;
     }
+
+    function getReports(uint256 start, uint256 end) external view returns (Report[] memory) {
+        uint256 count = _reportCounter;
+        if (start == 0 || start > count) {
+            return new Report[](0);
+        }
+
+        if (end > count) {
+            end = count;
+        }
+
+        uint256 size = end - start + 1;
+        Report[] memory reports = new Report[](size);
+        uint256 j = 0;
+        for (uint256 i = start; i <= end; i++) {
+            reports[j] = _reports[i];
+            j++;
+        }
+        return reports;
+    }
 }

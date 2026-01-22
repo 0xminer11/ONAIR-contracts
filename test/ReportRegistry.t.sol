@@ -44,7 +44,7 @@ contract ReportRegistryTest is Test {
         registry.registerReport(cid);
     }
 
-    function testGetReportByIdNonExistent() public {
+    function testGetReportByIdNonExistent() public view {
         IReportRegistry.Report memory report = registry.getReportById(999);
         assertEq(report.reportId, 0);
         assertEq(bytes(report.cid).length, 0);
@@ -67,5 +67,33 @@ contract ReportRegistryTest is Test {
         vm.expectEmit(true, true, true, true);
         emit IReportRegistry.ReportRegistered(1, cid, block.timestamp);
         registry.registerReport(cid);
+    }
+
+    function testGetReports() public {
+        string memory cid1 = "Qm...abc";
+        string memory cid2 = "Qm...def";
+
+        vm.prank(owner);
+        uint256 timestamp1 = block.timestamp;
+        registry.registerReport(cid1);
+
+        // To ensure a different timestamp for the second report, we can slightly advance the time
+        vm.warp(block.timestamp + 1);
+
+        vm.prank(owner);
+        uint256 timestamp2 = block.timestamp;
+        registry.registerReport(cid2);
+
+        IReportRegistry.Report[] memory reports = registry.getReports(1, 2);
+
+        assertEq(reports.length, 2);
+
+        assertEq(reports[0].reportId, 1);
+        assertEq(reports[0].cid, cid1);
+        assertEq(reports[0].timestamp, timestamp1);
+
+        assertEq(reports[1].reportId, 2);
+        assertEq(reports[1].cid, cid2);
+        assertEq(reports[1].timestamp, timestamp2);
     }
 }

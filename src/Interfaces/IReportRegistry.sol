@@ -19,4 +19,6 @@ interface IReportRegistry {
     function getReportById(uint256 reportId) external view returns (Report memory);
 
     function getReportCount() external view returns (uint256);
+
+    function getReports(uint256 offset, uint256 limit) external view returns (Report[] memory);
 }
