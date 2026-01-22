@@ -10,12 +10,12 @@ contract AIRTokenTest is Test {
     address user = address(0xBEEF);
 
     function setUp() public {
-        token = new AIRToken(owner);
+        token = new AIRToken(owner, address(0));
         vm.prank(owner);
         token.transfer(user, 1e18);
     }
 
-    function testInitialSupply() public {
+    function testInitialSupply() public view {
         assertEq(token.totalSupply(), 100_000_000_000e18);
         assertEq(token.balanceOf(owner), 100_000_000_000e18 - 1e18);
     }

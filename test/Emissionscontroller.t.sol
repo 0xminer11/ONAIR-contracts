@@ -6,6 +6,8 @@ import "../src/EmissionsController.sol";
 import "../src/TreasuryVault.sol";
 import "../src/AIRToken.sol";
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
 contract EmissionsControllerTest is Test {
     EmissionsController controller;
     TreasuryVault vault;
@@ -17,7 +19,7 @@ contract EmissionsControllerTest is Test {
 
     function setUp() public {
         // Deploy AIR token
-        air = new AIRToken(owner);
+        air = new AIRToken(owner, address(0));
 
         // Deploy treasury
         vm.prank(owner);
@@ -69,7 +71,7 @@ contract EmissionsControllerTest is Test {
     function testOnlyOwnerCanFundEpoch() public {
         uint256 epochId = 3;
 
-        vm.expectRevert("OwnableUnauthorizedAccount(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496)");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
         controller.fundEpoch(epochId);
     }
 
@@ -85,11 +87,31 @@ contract EmissionsControllerTest is Test {
     }
 
     function testSetWeeklyEmissionOnlyOwner() public {
-        vm.prank(address(999));
+        address nonOwner = address(999);
+        vm.prank(nonOwner);
 
-        vm.expectRevert("OwnableUnauthorizedAccount(0x00000000000000000000000000000000000003E7)");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
         controller.setWeeklyEmission(123);
     }
+
+    function testConstructorRevertsOnZeroAddress() public {
+        vm.expectRevert(EmissionsController.ZeroAddress.selector);
+        new EmissionsController(
+            TreasuryVault(address(0)),
+            merkle,
+            weeklyEmission,
+            owner
+        );
+
+        vm.expectRevert(EmissionsController.ZeroAddress.selector);
+        new EmissionsController(
+            vault,
+            address(0),
+            weeklyEmission,
+            owner
+        );
+    }
+
 
     /*//////////////////////////////////////////////////////////////
                         EVENT TESTS

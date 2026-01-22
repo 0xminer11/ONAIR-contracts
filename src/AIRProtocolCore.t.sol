@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Test, console2} from "forge-std/Test.sol";
-import "../src/AIRProtocolCore.sol";
+import {AIRProtocolCore} from "../src/AIRProtocolCore.sol";
 
 contract AIRProtocolCoreTest is Test {
     AIRProtocolCore public core;
@@ -25,7 +25,7 @@ contract AIRProtocolCoreTest is Test {
     }
 
     function test_CommitReport() public {
-        vm.prank(validator);
+        vm.startPrank(validator);
 
         vm.expectEmit(true, true, false, true);
         emit AIRProtocolCore.ReportCommitted(
@@ -41,6 +41,8 @@ contract AIRProtocolCoreTest is Test {
         assertEq(r.airScore, AIR_SCORE);
         assertEq(r.validator, validator);
         assertEq(r.blockTimestamp, uint64(block.timestamp));
+
+        vm.stopPrank();
     }
 
     function test_RevertWhen_NotValidator() public {

@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/MerkleDistributorEpoch.sol";
 import "../src/AIRToken.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract MerkleDistributorEpochTest is Test {
     MerkleDistributorEpoch distributor;
@@ -23,7 +24,7 @@ contract MerkleDistributorEpochTest is Test {
     bytes32[] proof_user2;
 
     function setUp() public {
-        air = new AIRToken(owner);
+        air = new AIRToken(owner, address(0));
 
         vm.prank(owner);
         distributor = new MerkleDistributorEpoch(IERC20(address(air)), owner);
@@ -71,7 +72,7 @@ contract MerkleDistributorEpochTest is Test {
     }
 
     function testOnlyOwnerCanSetRoot() public {
-        vm.expectRevert("OwnableUnauthorizedAccount(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496)");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
         distributor.setMerkleRoot(88, root);
     }
 

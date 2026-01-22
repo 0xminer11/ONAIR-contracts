@@ -8,21 +8,19 @@ contract AIRProtocolCore {
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
 
-    error NotValidator();
-    error StoryAlreadyCommitted();
-    error ZeroStoryId();
-    error EmptyClaimsArray();
+    error NotValidator(); // Caller is not the genesis validator
+    error ReportAlreadyCommitted(); // A report with this ID has already been committed
+    error ZeroReportId(); // The provided report ID is zero
+    error EmptyReportCid(); // The provided report CID is empty
 
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event StoryCommitted(
-        bytes32 indexed storyId,
-        uint64 overallTrustScore,
-        uint32 confidenceIndex,
-        uint32 biasIndex,
-        uint8 protocolVersion,
+    event ReportCommitted(
+        bytes32 indexed reportId,
+        string reportCid,
+        uint64 airScore,
         address indexed validator,
         uint64 blockTimestamp
     );
@@ -34,23 +32,15 @@ contract AIRProtocolCore {
     /// @notice Genesis validator address for Phase 1 (PoA).
     address public immutable genesisValidator;
 
-    struct StoryHeader {
-        uint64 overallTrustScore; // e.g. 0–10000 (basis points)
-        uint32 confidenceIndex;   // optional
-        uint32 biasIndex;         // optional
-        uint8  protocolVersion;   // version of scoring algorithm
-        uint64 blockTimestamp;    // when committed
-        address validator;        // who committed
+    struct Report {
+        string reportCid; // IPFS CID of the report data
+        uint64 airScore; // e.g. 0–10000 (basis points)
+        uint64 blockTimestamp; // when committed
+        address validator; // who committed
     }
 
-    struct StoryData {
-        StoryHeader header;
-        bytes32[] claimHashes; // hashes of claims for this story
-        bytes32 provenanceHash; // optional combined provenance (sourceURL, metadata hash, etc.)
-    }
-
-    // storyId => StoryData
-    mapping(bytes32 => StoryData) private _stories;
+    // reportId => Report
+    mapping(bytes32 => Report) private _reports;
 
     /*//////////////////////////////////////////////////////////////
                                CONSTRUCTOR
@@ -74,72 +64,44 @@ contract AIRProtocolCore {
                                   VIEWS
     //////////////////////////////////////////////////////////////*/
 
-    function getStory(bytes32 storyId)
+    function getReport(bytes32 reportId)
         external
         view
-        returns (
-            StoryHeader memory header,
-            bytes32[] memory claimHashes,
-            bytes32 provenanceHash
-        )
+        returns (Report memory)
     {
-        StoryData storage s = _stories[storyId];
-        return (s.header, s.claimHashes, s.provenanceHash);
+        return _reports[reportId];
     }
 
-    function exists(bytes32 storyId) external view returns (bool) {
-        return _stories[storyId].header.blockTimestamp != 0;
+    function exists(bytes32 reportId) external view returns (bool) {
+        return _reports[reportId].blockTimestamp != 0;
     }
 
     /*//////////////////////////////////////////////////////////////
                                   LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Commit a story's trust data to chain.
+    /// @notice Commit a report's data to chain.
     /// @dev Called only by the Genesis Validator service in Phase 1.
-    function commitStory(
-        bytes32 storyId,
-        bytes32[] calldata claimHashes,
-        bytes32 provenanceHash,
-        uint64 overallTrustScore,
-        uint32 confidenceIndex,
-        uint32 biasIndex,
-        uint8 protocolVersion
+    function commitReport(
+        bytes32 reportId,
+        string calldata reportCid,
+        uint64 airScore
     ) external onlyValidator {
-        if (storyId == bytes32(0)) revert ZeroStoryId();
-        if (_stories[storyId].header.blockTimestamp != 0) revert StoryAlreadyCommitted();
-        if (claimHashes.length == 0) revert EmptyClaimsArray();
+        if (reportId == bytes32(0)) revert ZeroReportId();
+        if (_reports[reportId].blockTimestamp != 0) revert ReportAlreadyCommitted();
+        if (bytes(reportCid).length == 0) revert EmptyReportCid();
 
-        StoryData storage s = _stories[storyId];
-
-        // Store header (packed)
-        s.header = StoryHeader({
-            overallTrustScore: overallTrustScore,
-            confidenceIndex: confidenceIndex,
-            biasIndex: biasIndex,
-            protocolVersion: protocolVersion,
+        _reports[reportId] = Report({
+            reportCid: reportCid,
+            airScore: airScore,
             blockTimestamp: uint64(block.timestamp),
             validator: msg.sender
         });
 
-        // Copy claim hashes
-        uint256 len = claimHashes.length;
-        s.claimHashes = new bytes32[](len);
-        for (uint256 i; i < len; ) {
-            s.claimHashes[i] = claimHashes[i];
-            unchecked {
-                ++i;
-            }
-        }
-
-        s.provenanceHash = provenanceHash;
-
-        emit StoryCommitted(
-            storyId,
-            overallTrustScore,
-            confidenceIndex,
-            biasIndex,
-            protocolVersion,
+        emit ReportCommitted(
+            reportId,
+            reportCid,
+            airScore,
             msg.sender,
             uint64(block.timestamp)
         );

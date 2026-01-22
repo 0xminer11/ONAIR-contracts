@@ -14,12 +14,12 @@ contract TreasuryVault is Ownable {
     event EmissionsControllerUpdated(address indexed controller);
     event TokensPulled(address indexed to, uint256 amount);
 
-    IERC20 public immutable AIR;
+    IERC20 public immutable air;
     address public emissionsController;
 
-    constructor(IERC20 air, address initialOwner) Ownable(initialOwner) {
-        if (address(air) == address(0)) revert ZeroAddress();
-        AIR = air;
+    constructor(IERC20 _air, address initialOwner) Ownable(initialOwner) {
+        if (address(_air) == address(0)) revert ZeroAddress();
+        air = _air;
     }
 
     function setEmissionsController(address controller) external onlyOwner {
@@ -31,8 +31,8 @@ contract TreasuryVault is Ownable {
     /// @notice Called by EmissionsController to fund MerkleDistributor.
     function pullTo(address to, uint256 amount) external {
         if (msg.sender != emissionsController) revert NotAuthorized();
-        bool ok = AIR.transfer(to, amount);
-        if (!ok) revert TransferFailed();
         emit TokensPulled(to, amount);
+        bool ok = air.transfer(to, amount);
+        if (!ok) revert TransferFailed();
     }
 }

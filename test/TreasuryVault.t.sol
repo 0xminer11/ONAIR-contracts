@@ -14,7 +14,7 @@ contract TreasuryVaultTest is Test {
     address receiver = address(300);
 
     function setUp() public {
-        air = new AIRToken(owner);
+        air = new AIRToken(owner, address(0));
 
         vm.prank(owner);
         vault = new TreasuryVault(IERC20(address(air)), owner);

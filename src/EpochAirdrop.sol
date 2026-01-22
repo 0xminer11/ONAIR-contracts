@@ -5,9 +5,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-/// @title EpochAirdrop
-/// @notice Epoch-based push airdrop contract for AIR tokens with admin and co-admins
-contract EpochAirdrop is AccessControl {
+/// @title AirdropController
+/// @notice Batch-based push airdrop contract for AIR tokens with admin and co-admins
+contract AirdropController is AccessControl {
     using SafeERC20 for IERC20;
 
     /*//////////////////////////////////////////////////////////////
@@ -27,9 +27,9 @@ contract EpochAirdrop is AccessControl {
 
     event CoAdminAdded(address indexed coAdmin);
     event CoAdminRemoved(address indexed coAdmin);
-    event EpochCreated(uint256 indexed epochId);
-    event RecipientAirdropped(uint256 indexed epochId, address indexed recipient, uint256 amount);
-    event EpochDistributed(uint256 indexed epochId, uint256 totalAmount);
+    event BatchCreated(uint256 indexed batchId, uint256 totalAllocation);
+    event RecipientAirdropped(uint256 indexed batchId, address indexed recipient, uint256 amount);
+    event BatchDistributed(uint256 indexed batchId, uint256 totalAmount);
     event TokensWithdrawn(address indexed token, address indexed to, uint256 amount);
 
     /*//////////////////////////////////////////////////////////////
@@ -43,17 +43,17 @@ contract EpochAirdrop is AccessControl {
     // co-admins
     mapping(address => bool) public coAdmins;
 
-    // epochId => recipient => distributed
-    mapping(uint256 => mapping(address => bool)) private distributed;
+    // batchId => recipient => distributed
+    mapping(uint256 => mapping(address => bool)) private isDistributedInBatch;
 
-    // epoch data
-    struct Epoch {
-        uint256 totalAllocation; // optional cap for the epoch; 0 means unlimited
+    // batch data
+    struct Batch {
+        uint256 totalAllocation; // optional cap for the batch; 0 means unlimited
         uint256 distributedAmount;
         bool exists;
     }
 
-    mapping(uint256 => Epoch) public epochs;
+    mapping(uint256 => Batch) public batches;
 
     /*//////////////////////////////////////////////////////////////
                                CONSTRUCTOR
@@ -62,7 +62,7 @@ contract EpochAirdrop is AccessControl {
     constructor(IERC20 air, address admin_) {
         if (address(air) == address(0) || admin_ == address(0)) revert ZeroAddress();
         AIR = air;
-        _setupRole(DEFAULT_ADMIN_ROLE, admin_);
+        _grantRole(DEFAULT_ADMIN_ROLE, admin_);
         _setRoleAdmin(COADMIN_ROLE, DEFAULT_ADMIN_ROLE);
     }
 
@@ -91,18 +91,18 @@ contract EpochAirdrop is AccessControl {
     }
 
     /*//////////////////////////////////////////////////////////////
-                               EPOCHS
+                               BATCHES
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Create an epoch with an optional allocation cap (0 = unlimited)
-    function createEpoch(uint256 epochId, uint256 totalAllocation) external onlyAdminOrCoAdmin {
-        Epoch storage e = epochs[epochId];
-        if (!e.exists) {
-            e.exists = true;
-            e.totalAllocation = totalAllocation;
-            emit EpochCreated(epochId);
+    /// @notice Create a distribution batch with an optional allocation cap (0 = unlimited)
+    function createBatch(uint256 batchId, uint256 totalAllocation) external onlyAdminOrCoAdmin {
+        Batch storage b = batches[batchId];
+        if (!b.exists) {
+            b.exists = true;
+            b.totalAllocation = totalAllocation;
+            emit BatchCreated(batchId, totalAllocation);
         } else {
-            e.totalAllocation = totalAllocation; // allow updating cap
+            b.totalAllocation = totalAllocation; // allow updating cap
         }
     }
 
@@ -120,9 +120,9 @@ contract EpochAirdrop is AccessControl {
                              DISTRIBUTION
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Distribute AIR tokens to recipients for a given epoch (push transfers)
-    function distributeEpoch(
-        uint256 epochId,
+    /// @notice Distribute AIR tokens to recipients for a given batch (push transfers)
+    function distributeBatch(
+        uint256 batchId,
         address[] calldata recipients,
         uint256[] calldata amounts
     ) external onlyAdminOrCoAdmin {
@@ -140,15 +140,15 @@ contract EpochAirdrop is AccessControl {
         uint256 bal = AIR.balanceOf(address(this));
         if (bal < totalBatch) revert InsufficientBalance();
 
-        Epoch storage e = epochs[epochId];
-        if (!e.exists) {
-            e.exists = true;
-            emit EpochCreated(epochId);
+        Batch storage b = batches[batchId];
+        if (!b.exists) {
+            b.exists = true;
+            emit BatchCreated(batchId, 0); // Create with 0 allocation if not exists
         }
 
         // if totalAllocation set, ensure not exceeding
-        if (e.totalAllocation != 0) {
-            if (e.distributedAmount + totalBatch > e.totalAllocation) revert InsufficientBalance();
+        if (b.totalAllocation != 0) {
+            if (b.distributedAmount + totalBatch > b.totalAllocation) revert InsufficientBalance();
         }
 
         // perform distribution (checks-effects-interactions)
@@ -157,22 +157,22 @@ contract EpochAirdrop is AccessControl {
             uint256 amt = amounts[i];
 
             if (to == address(0)) revert ZeroAddress();
-            if (distributed[epochId][to]) revert AlreadyDistributed();
+            if (isDistributedInBatch[batchId][to]) revert AlreadyDistributed();
 
             // mark distributed before transfer
-            distributed[epochId][to] = true;
+            isDistributedInBatch[batchId][to] = true;
 
             // transfer
             AIR.safeTransfer(to, amt);
-            emit RecipientAirdropped(epochId, to, amt);
+            emit RecipientAirdropped(batchId, to, amt);
 
             unchecked {
                 ++i;
-                e.distributedAmount += amt;
+                b.distributedAmount += amt;
             }
         }
 
-        emit EpochDistributed(epochId, totalBatch);
+        emit BatchDistributed(batchId, totalBatch);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -198,12 +198,12 @@ contract EpochAirdrop is AccessControl {
                                  VIEWS
     //////////////////////////////////////////////////////////////*/
 
-    function isDistributed(uint256 epochId, address recipient) external view returns (bool) {
-        return distributed[epochId][recipient];
+    function isDistributed(uint256 batchId, address recipient) external view returns (bool) {
+        return isDistributedInBatch[batchId][recipient];
     }
 
-    function epochDistributedAmount(uint256 epochId) external view returns (uint256) {
-        return epochs[epochId].distributedAmount;
+    function batchDistributedAmount(uint256 batchId) external view returns (uint256) {
+        return batches[batchId].distributedAmount;
     }
 
     function contractBalance() external view returns (uint256) {

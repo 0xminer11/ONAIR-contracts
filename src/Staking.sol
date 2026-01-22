@@ -27,7 +27,7 @@ contract Staking is ReentrancyGuard {
                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
-    IERC20 public immutable AIR;
+    IERC20 public immutable air;
     /// @notice Minimum stake to be eligible: 500 AIR
     uint256 public constant MIN_ELIGIBLE_STAKE = 500e18;
 
@@ -42,9 +42,9 @@ contract Staking is ReentrancyGuard {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(IERC20 air) {
-        if (address(air) == address(0)) revert ZeroAddress();
-        AIR = air;
+    constructor(IERC20 _air) {
+        if (address(_air) == address(0)) revert ZeroAddress();
+        air = _air;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -71,7 +71,7 @@ contract Staking is ReentrancyGuard {
         totalStaked += amount;
 
         // Interactions
-        bool ok = AIR.transferFrom(msg.sender, address(this), amount);
+        bool ok = air.transferFrom(msg.sender, address(this), amount);
         if (!ok) revert TransferFailed();
 
         emit Staked(msg.sender, amount);
@@ -90,7 +90,7 @@ contract Staking is ReentrancyGuard {
         }
 
         // Interactions
-        bool ok = AIR.transfer(msg.sender, amount);
+        bool ok = air.transfer(msg.sender, amount);
         if (!ok) revert TransferFailed();
 
         emit Unstaked(msg.sender, amount);

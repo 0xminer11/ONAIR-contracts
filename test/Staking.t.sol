@@ -12,7 +12,7 @@ contract StakingTest is Test {
     address user = address(1);
 
     function setUp() public {
-        air = new AIRToken(address(this));
+        air = new AIRToken(address(this), address(0));
         staking = new Staking(IERC20(address(air)));
 
         air.transfer(user, 1000e18);
