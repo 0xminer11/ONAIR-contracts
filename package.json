@@ -1,0 +1,18 @@
+{
+  "name": "onair-contracts",
+  "version": "1.0.0",
+  "description": "ONAIR Smart Contracts",
+  "scripts": {
+    "test": "hardhat test",
+    "compile": "hardhat compile"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-foundry": "^1.2.0",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "forge-std": "^1.1.2",
+    "hardhat": "^2.22.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0"
+  }
+}

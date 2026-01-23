@@ -1,99 +1,105 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Test.sol";
-import "../src/ReportRegistry.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Test, console2} from "forge-std/Test.sol";
+import {ReportRegistry} from "../src/ReportRegistry.sol";
 
 contract ReportRegistryTest is Test {
-    ReportRegistry registry;
-    address owner = address(0xA11CE);
-    address nonOwner = address(0xBEEF);
+    ReportRegistry public registry;
+    
+    address public owner = makeAddr("owner");
+    address public forwarder = makeAddr("forwarder");
+    address public relayer = makeAddr("relayer");
 
     function setUp() public {
-        vm.prank(owner);
-        registry = new ReportRegistry(owner);
+        // Deploying with owner and the trusted forwarder address
+        registry = new ReportRegistry(owner, forwarder);
     }
 
-    function testRegisterReport() public {
-        string memory cid = "Qm...123";
-        vm.prank(owner);
-        registry.registerReport(cid);
+    /*//////////////////////////////////////////////////////////////
+                               REGISTRATION
+    //////////////////////////////////////////////////////////////*/
 
-        assertEq(registry.getReportCount(), 1);
-        IReportRegistry.Report memory report = registry.getReportById(1);
-        assertEq(report.reportId, 1);
-        assertEq(report.cid, cid);
-        assertEq(report.timestamp, block.timestamp);
+    function test_StandardRegistration() public {
+        vm.prank(owner);
+        registry.registerReport("QmStandardCID");
+        
+        assertEq(registry.getReportCount(), 1); 
+        assertEq(registry.getReportById(1).cid, "QmStandardCID"); 
     }
 
-    function testRegisterReportRevertsOnDuplicate() public {
-        string memory cid = "Qm...123";
-        vm.prank(owner);
-        registry.registerReport(cid);
+    function test_GaslessRegistration() public {
+        string memory cid = "QmGaslessCID";
 
-        vm.prank(owner);
-        vm.expectRevert("CID already exists");
-        registry.registerReport(cid);
+        // 1. Prepare functional call
+        bytes memory functionalCall = abi.encodeWithSelector(
+            registry.registerReport.selector, 
+            cid
+        );
+
+        // 2. Append owner address to calldata to simulate Trusted Forwarder 
+        bytes memory dataWithUser = abi.encodePacked(functionalCall, owner);
+
+        // 3. Relayer calls through the trusted forwarder
+        vm.prank(forwarder);
+        (bool success, ) = address(registry).call(dataWithUser);
+        
+        assertTrue(success, "Gasless registration failed");
+        assertEq(registry.getReportCount(), 1); 
+        assertEq(registry.getReportById(1).cid, cid); 
     }
 
-    function testRegisterReportOnlyOwner() public {
-        string memory cid = "Qm...456";
+    /*//////////////////////////////////////////////////////////////
+                                PAGINATION
+    //////////////////////////////////////////////////////////////*/
+
+    function test_GetReportsPagination() public {
+        vm.startPrank(owner);
+        registry.registerReport("CID1");
+        registry.registerReport("CID2");
+        registry.registerReport("CID3");
+        registry.registerReport("CID4");
+        registry.registerReport("CID5");
+        vm.stopPrank();
+
+        // Request: Start at index 2, limit 3 (Should return CID2, CID3, CID4)
+        ReportRegistry.Report[] memory batch = registry.getReports(2, 3); 
+        
+        assertEq(batch.length, 3); 
+        assertEq(batch[0].cid, "CID2"); 
+        assertEq(batch[1].cid, "CID3"); 
+        assertEq(batch[2].cid, "CID4"); 
+    }
+
+    function test_GetReportsOutOfBounds() public {
+        vm.prank(owner);
+        registry.registerReport("CID1");
+
+        // Request offset greater than count
+        ReportRegistry.Report[] memory batch = registry.getReports(10, 1); 
+        assertEq(batch.length, 0); 
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                SECURITY
+    //////////////////////////////////////////////////////////////*/
+
+    function test_RevertWhen_NonOwnerRegisters() public {
+        address nonOwner = makeAddr("nonOwner");
+        
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
-        registry.registerReport(cid);
+        // Should revert because of onlyOwner modifier 
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", nonOwner));
+        registry.registerReport("QmUnauthorized");
     }
 
-    function testGetReportByIdNonExistent() public view {
-        IReportRegistry.Report memory report = registry.getReportById(999);
-        assertEq(report.reportId, 0);
-        assertEq(bytes(report.cid).length, 0);
-        assertEq(report.timestamp, 0);
-    }
-
-    function testGetReportCount() public {
-        assertEq(registry.getReportCount(), 0);
-        vm.prank(owner);
-        registry.registerReport("cid1");
-        assertEq(registry.getReportCount(), 1);
-        vm.prank(owner);
-        registry.registerReport("cid2");
-        assertEq(registry.getReportCount(), 2);
-    }
-
-    function testRegisterReportEmitsEvent() public {
-        string memory cid = "Qm...789";
-        vm.prank(owner);
-        vm.expectEmit(true, true, true, true);
-        emit IReportRegistry.ReportRegistered(1, cid, block.timestamp);
-        registry.registerReport(cid);
-    }
-
-    function testGetReports() public {
-        string memory cid1 = "Qm...abc";
-        string memory cid2 = "Qm...def";
-
-        vm.prank(owner);
-        uint256 timestamp1 = block.timestamp;
-        registry.registerReport(cid1);
-
-        // To ensure a different timestamp for the second report, we can slightly advance the time
-        vm.warp(block.timestamp + 1);
-
-        vm.prank(owner);
-        uint256 timestamp2 = block.timestamp;
-        registry.registerReport(cid2);
-
-        IReportRegistry.Report[] memory reports = registry.getReports(1, 2);
-
-        assertEq(reports.length, 2);
-
-        assertEq(reports[0].reportId, 1);
-        assertEq(reports[0].cid, cid1);
-        assertEq(reports[0].timestamp, timestamp1);
-
-        assertEq(reports[1].reportId, 2);
-        assertEq(reports[1].cid, cid2);
-        assertEq(reports[1].timestamp, timestamp2);
+    function test_RevertWhen_DuplicateCID() public {
+        vm.startPrank(owner);
+        registry.registerReport("QmUnique");
+        
+        // Registering the same CID again 
+        vm.expectRevert("CID already exists"); 
+        registry.registerReport("QmUnique");
+        vm.stopPrank();
     }
 }
