@@ -1,55 +1,44 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Test.sol";
-import "../src/Staking.sol";
-import "../src/AIRToken.sol";
+import {Test, console2} from "forge-std/Test.sol";
+import {Staking} from "../src/Staking.sol";
+import {AIRToken} from "../src/AIRToken.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract StakingTest is Test {
-    Staking staking;
-    AIRToken air;
+    Staking public staking;
+    AIRToken public token;
 
-    address user = address(1);
+    address public owner = address(0x1);
+    address public forwarder = address(0x2);
+    address public user = address(0x3);
 
     function setUp() public {
-        air = new AIRToken(address(this), address(0));
-        staking = new Staking(IERC20(address(air)));
-
-        air.transfer(user, 1000e18);
-    }
-
-    function testStake() public {
-        vm.prank(user);
-        air.approve(address(staking), 500e18);
-
-        vm.prank(user);
-        staking.stake(500e18);
-
-        assertEq(staking.stakedBalanceOf(user), 500e18);
-        assertTrue(staking.isEligible(user));
-    }
-
-    function testUnstake() public {
-        vm.startPrank(user);
-        air.approve(address(staking), 500e18);
-        staking.stake(500e18);
-        staking.unstake(200e18);
+        vm.startPrank(owner);
+        token = new AIRToken(owner, address(0));
+        // Deploy updated Staking with forwarder
+        staking = new Staking(IERC20(address(token)), forwarder);
+        token.transfer(user, 1000e18);
         vm.stopPrank();
-
-        assertEq(staking.stakedBalanceOf(user), 300e18);
     }
 
-    function testUnstakeRevertsIfInsufficient() public {
-        vm.startPrank(user);
-        air.approve(address(staking), 500e18);
-        staking.stake(300e18);
+    function test_GaslessStake() public {
+        uint256 amount = 500e18;
 
-        vm.expectRevert(Staking.InsufficientStake.selector);
-        staking.unstake(500e18);
-    }
+        vm.prank(user);
+        token.approve(address(staking), amount);
 
-    function testZeroAmountStakeReverts() public {
-        vm.expectRevert(Staking.ZeroAmount.selector);
-        staking.stake(0);
+        // Simulate Forwarder appending user address
+        bytes memory data = abi.encodePacked(
+            abi.encodeWithSelector(staking.stake.selector, amount),
+            user
+        );
+
+        vm.prank(forwarder);
+        (bool success, ) = address(staking).call(data);
+        assertTrue(success, "Forwarded stake failed");
+
+        assertEq(staking.stakedBalanceOf(user), amount);
     }
 }

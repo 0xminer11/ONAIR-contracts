@@ -12,3 +12,15 @@ docs/
 
 # Dotenv file
 .env
+
+# Node modules
+node_modules/
+node_modules
+
+# Hardhat files
+artifacts/
+typechain/
+hh-fund-logs/
+.solcover.js
+coverage/
+cache_hardhat/
