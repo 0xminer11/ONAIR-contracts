@@ -20,27 +20,22 @@ contract Deploy is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 2. Deploy Trusted Forwarder (The "Trust Anchor" for gasless txs)
+        console.log("--- STARTING DEPLOYMENT ---");
+        console.log("Deployer Address:", deployer);
+
+        // 2. Deploy Trusted Forwarder
         AIRProtocolForwarder forwarder = new AIRProtocolForwarder("AIRProtocolForwarder");
         address fwd = address(forwarder);
-        console.log("Forwarder deployed at:", fwd);
 
         // 3. Deploy AIRToken
-        // Note: The constructor automatically mints MAX_SUPPLY (100B) to the initialOwner.
         AIRToken token = new AIRToken(deployer, fwd);
-        console.log("AIRToken deployed at:", address(token));
 
-        // 4. Deploy Staking (Gasless Enabled)
-        // Uses 500 AIR as the MIN_ELIGIBLE_STAKE[cite: 95].
+        // 4. Deploy Staking
         Staking staking = new Staking(IERC20(address(token)), fwd);
-        console.log("Staking deployed at:", address(staking));
 
         // 5. Deploy Protocol Core & Report Registry
-        // AIRProtocolCore sets the deployer as the Genesis Validator[cite: 182, 183].
         AIRProtocolCore core = new AIRProtocolCore(deployer);
         ReportRegistry registry = new ReportRegistry(deployer, fwd);
-        console.log("AIRProtocolCore deployed at:", address(core));
-        console.log("ReportRegistry deployed at:", address(registry));
 
         // 6. Deploy Treasury & Distribution Infrastructure
         TreasuryVault treasury = new TreasuryVault(IERC20(address(token)), deployer);
@@ -51,7 +46,6 @@ contract Deploy is Script {
             fwd
         );
 
-        // Initial weekly emission set to 1,000,000 AIR
         uint256 initialWeeklyEmission = 1_000_000e18; 
         EmissionsController emissions = new EmissionsController(
             treasury,
@@ -60,19 +54,46 @@ contract Deploy is Script {
             deployer
         );
 
-        // 7. Post-Deployment Configuration & Minting Logic
-        // Authorize the EmissionsController to pull funds from the Treasury[cite: 113, 115].
+        // 7. Post-Deployment Configuration
         treasury.setEmissionsController(address(emissions));
         
-        // Setup initial funding for the reward ecosystem
-        // Since all tokens were minted to the deployer, we transfer them to the Treasury.
-        uint256 treasurySeed = 50_000_000e18; // 50 Million AIR
+        uint256 treasurySeed = 50_000_000e18; 
         token.transfer(address(treasury), treasurySeed);
         
-        console.log("TreasuryVault seeded with:", treasurySeed);
-        console.log("EmissionsController authorized on Treasury");
-        console.log("MerkleDistributor ready for epoch 1");
-
         vm.stopBroadcast();
+
+        // 8. Export to JSON
+        string memory obj = "deployment_data";
+        vm.serializeAddress(obj, "forwarder", address(forwarder));
+        vm.serializeAddress(obj, "token", address(token));
+        vm.serializeAddress(obj, "staking", address(staking));
+        vm.serializeAddress(obj, "core", address(core));
+        vm.serializeAddress(obj, "registry", address(registry));
+        vm.serializeAddress(obj, "treasury", address(treasury));
+        vm.serializeAddress(obj, "emissions", address(emissions));
+        // The final call to serialize returns the full JSON string
+        string memory finalJson = vm.serializeAddress(obj, "MerkleDistributor", address(distributor));
+
+        // Write to file
+        string memory path = string.concat(vm.projectRoot(), "/deployments.json");
+        vm.writeFile(path, finalJson);
+
+        // --- FINAL LOGS FOR FRONTEND/BACKEND ---
+        console.log("----------------------------------------------");
+        console.log("PROTOCOL DEPLOYMENT COMPLETE");
+        console.log("----------------------------------------------");
+        console.log("JSON saved to:     ", path);
+        console.log("Forwarder:         ", address(forwarder));
+        console.log("AIRToken:          ", address(token));
+        console.log("Staking:           ", address(staking));
+        console.log("ProtocolCore:      ", address(core));
+        console.log("ReportRegistry:    ", address(registry));
+        console.log("TreasuryVault:     ", address(treasury));
+        console.log("EmissionsCtrl:     ", address(emissions));
+        console.log("MerkleDistributor: ", address(distributor));
+        console.log("----------------------------------------------");
+        console.log("Treasury Seeded:   ", treasurySeed / 1e18, "AIR");
+        console.log("Weekly Emission:   ", initialWeeklyEmission / 1e18, "AIR");
+        console.log("----------------------------------------------");
     }
 }
